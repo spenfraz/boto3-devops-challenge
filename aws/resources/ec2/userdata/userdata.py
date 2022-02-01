@@ -72,7 +72,35 @@ createRegularUser () {
 
     # change (recursive) ownership from root:root to new user for .ssh/
     chown $1:$1 -R /home/$1/.ssh
-} 
+}
+
+
+### makeSharedDirectory(username, directory)
+##      This function creates a user owned directory
+##    (of the same name) within a specific parent directory.
+##    It also ensures that the parent directory is owned by root.
+##
+##  The purpose of this function is to give each user their own
+##  folder (exclusive write access) within a shared read parent
+##      directory owned by root.
+##  NOTE:
+##      All files within the shared parent directory
+##   (including all sub-directories) can be read by all non-root users.
+#
+# $1 ==> username
+# $2 ==> directory
+makeSharedDirectory () {
+
+    # make directory (eg. /data/user1 )
+    mkdir $2/$1
+
+    # change ownership (recursively) to user's group
+    chown -R root:$1 $2/$1
+
+    # give group write access
+    chmod -R g+w $2/$1
+
+}
 
 
 ### formatAndMount(device_name, device_type, mount_path)

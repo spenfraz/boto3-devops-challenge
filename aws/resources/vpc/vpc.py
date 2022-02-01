@@ -111,6 +111,7 @@ def createVPC(g):
         print('creating vpc')
         # create vpc
         vpc = ec2_resource.create_vpc(CidrBlock=g['config']['vpc']['cidr'])
+        time.sleep(2)
         vpc.wait_until_available()
 
         response = ec2_client.modify_vpc_attribute(

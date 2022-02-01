@@ -58,7 +58,11 @@ def createEc2Instances(g):
 
     for user in config['server']['users']:
         MODIFIED_USERDATA_SCRIPT += "\n" + "createRegularUser \"" + user['login'] + "\""
-
+    
+    for user in config['server']['users']:
+        for volume in volumes:
+            if volume['mount'] != '/':
+                MODIFIED_USERDATA_SCRIPT += "\n" + "makeSharedDirectory \"" + user['login'] + "\" \"" + volume['mount'] + "\""
     
     iam_instance_profile = createInstanceProfile(g)
     
