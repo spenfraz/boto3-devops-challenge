@@ -1,0 +1,85 @@
+---
+  output:
+    file: deployed.json
+  credentials:
+    file: aws.env
+  ssh_keys:
+    directory: ssh_keys
+  vpc:
+    # if true, a default vpc will be created (all vpc and subnet fields will be ignored).
+    # if false, a custom vpc will be created using vpc and subnet fields.
+    use_default_vpc: false
+    cidr: 192.168.0.0/16
+    tags:
+      # Ensure the Name tag is listed first (where key=Name)
+      - key: Name
+        value: fetch-devops-challenge-vpc
+    subnets:
+      - cidr: 192.168.1.0/24
+        availability_zone: us-east-1a
+        tags:
+          # Ensure the Name tag is listed first (where key=Name)
+          - key: Name
+            value: fetch-devops-challenge-subnet-1
+  # ec2 instance configuration
+  server:
+    subnet:
+      tags:
+        - key: Name
+          value: fetch-devops-challenge-subnet-1
+    ## AMI getLatestAMI()
+    ami_type: amzn2
+    architecture: x86_64
+    virtualization_type: hvm
+    ### root_device_name: volumes[0].device 
+    root_device_type: ebs
+    ## EC2 run_instance()
+    instance_type: t2.micro
+    min_count: 1
+    max_count: 1
+    userdata:
+      directory: aws_resources_ec2_userdata
+      file: userdata.sh
+    iam:
+      roles_directory: aws_resources_iam_role
+      policy_directory: aws_resources_iam_policy
+      instance_profile:
+        name: inspectEC2VolumesProfile
+        role:
+        #assume role policy document (Effect/Principal/Action)
+          name: inspectEC2VolumesRole
+          file: inspectEC2Volumes.json
+        policy:
+          #policy document (Effect/Action/Resource)
+          name: inspectEC2VolumesPolicy
+          file: inspectEC2Volumes.json
+    volumes:
+      # Ensure the root device is listed first (where mount = /)
+      - device: /dev/xvda
+        size_gb: 30 #10 is too small:: botocore.exceptions.ClientError: An error occurred (InvalidBlockDeviceMapping) when calling the RunInstances operation: Volume of size 10GB is smaller than  snapshot 'snap-0bc404d8ec43d7b9e', expect size >= 30GB
+        type: xfs
+        mount: /
+      - device: /dev/xvdf
+        size_gb: 20
+        type: ext4
+        mount: /data
+      - device: /dev/xvdc
+        size_gb: 20
+        type: ext4
+        mount: /extra
+    admin:
+      login: admin
+      # temporary password that will auto expire (change required on next login) once deployment completes
+      initial_sudo_password: 36skip74up36dog
+      ssh_key:
+        name: admin-key.pem
+    # non-admin users (without sudo access)
+    users:
+      - login: user1
+        can_sudo: false
+        ssh_key:
+          name: user1-key.pem
+      - login: user2
+        can_sudo: false
+        ssh_key:
+          name: user2-key.pem
