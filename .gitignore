@@ -1,5 +1,8 @@
 venv/
 aws.env
+*.pem
+*.pub
+deployed.json
 
 # Editors
 .vscode/
