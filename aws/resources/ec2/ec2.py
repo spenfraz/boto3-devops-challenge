@@ -142,9 +142,9 @@ def createEc2Instances(g):
             ec2data = {}
             ec2data['public_dns'] = inst.public_dns_name
             ec2data['ssh'] = []
-            ec2data['ssh'].append('ssh -i ' + './' + path + keyfile + " " + admin_user + '@' + inst.public_dns_name)
+            ec2data['ssh'].append('ssh -i ' + path + keyfile + " " + admin_user + '@' + inst.public_dns_name)
             for users in g['config']['server']['users']:
-                ec2data['ssh'].append('ssh -i ' + './' + path + users['login'] + '-key.pem' + " " + users['login'] + '@' + inst.public_dns_name)
+                ec2data['ssh'].append('ssh -i ' + path + users['login'] + '-key.pem' + " " + users['login'] + '@' + inst.public_dns_name)
             deployed['ec2_instances'].append(ec2data)
             #pprint(inst.block_device_mappings)
             #volumes = ec2_client.describe_instance_attribute(

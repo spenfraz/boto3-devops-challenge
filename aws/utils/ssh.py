@@ -28,14 +28,26 @@ def create_key_pair(path, keypair, is_admin, session):
             #print(out.getvalue())
 
             private_key = out.getvalue()
-        # write private key to file with permissions 400
-        with os.fdopen(os.open(ssh_keys_path + keypair, os.O_WRONLY | os.O_CREAT, 0o400), "w+") as handle:
-            handle.write(private_key)
-        
-        if not is_admin:
-            #w write public key to file with permissions 400
-            with os.fdopen(os.open(ssh_keys_path + keypair.replace('.pem','.pub'), os.O_WRONLY | os.O_CREAT, 0o400), "w+") as handle:
-                handle.write(public_key)
+        # if host os is not windows
+        if os.name != 'nt':
+            # write private key to file with permissions 400
+            with os.fdopen(os.open(ssh_keys_path + keypair, os.O_WRONLY | os.O_CREAT, 0o400), "w+") as handle:
+                handle.write(private_key)
+        else:
+            # write private key to file
+            with os.fdopen(os.open(ssh_keys_path + keypair, os.O_WRONLY | os.O_CREAT), "w+") as handle:
+                handle.write(private_key)
+        if os.name != 'nt':
+            if not is_admin:
+                #w write public key to file
+                with os.fdopen(os.open(ssh_keys_path + keypair.replace('.pem','.pub'), os.O_WRONLY | os.O_CREAT, 0o400), "w+") as handle:
+                    handle.write(public_key)
+        else:
+            if not is_admin:
+                # write private key to file
+                with os.fdopen(os.open(ssh_keys_path + keypair.replace('.pem','.pub'), os.O_WRONLY | os.O_CREAT), "w+") as handle:
+                    handle.write(public_key)
+
 
 # Deletes admin key via boto3's delete_key_pair, and 
 #  directly deletes the .pem and .pub files for user keys.

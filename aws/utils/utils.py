@@ -6,10 +6,14 @@ from os.path import join, dirname
 
 
 # load aws credentials from .env file
-def loadAwsCredentials(config):
-    aws_credentials = config['credentials']['file']
-    dotenv_path = join(dirname(__file__), aws_credentials)
+def loadAwsCredentials(g):
+    aws_credentials = g['config']['credentials']['file']
+    dotenv_path = g['root_path'] + aws_credentials
     load_dotenv(dotenv_path)
+    
+    changes = {}
+    changes['region'] = os.getenv('AWS_REGION')
+    updateDeployed(g, changes)
 
     return boto3.session.Session(
         aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
@@ -73,6 +77,8 @@ def scanInfra(g):
 # Delete all resources and update 'deployed' file
 def teardown(g):
     deployed = g['deployed']
+    region = g['deployed']['region']
 
-    os.system("python3 vpc_destroy.py --services ec2 --region us-east-1 --vpc_id " + deployed['vpc_id'])
+    os.system("python vpc_destroy.py --services ec2 --region " + region + " --vpc_id " + deployed['vpc_id'])
     clearDeployed(g)
+

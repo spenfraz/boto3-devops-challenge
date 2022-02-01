@@ -12,16 +12,18 @@ from aws.resources.ec2.ec2 import createEc2Instances
 
 def run(root_path):
     config, deployed = readFromConfig(root_path, args.filename)
-    session = loadAwsCredentials(config)
-    #logger = getLogger()
-    
+
     g = {}
     g['config'] = config
-    g['root_path'] = root_path
-    g['session'] = session
     g['deployed'] = deployed
-    #g['logger'] = logger
+    g['root_path'] = root_path
+
+    session = loadAwsCredentials(g)
+    #logger = getLogger()
     
+    g['session'] = session
+    #g['logger'] = logger
+
     if args.destroy:
         teardown(g)
         deleteInstanceProfile(g)
