@@ -49,6 +49,25 @@ def getPolicyArn(g, policy_name):
                 return policy['Arn']
     return ''
 
+# get policy dictionary
+def getPolicy(g, policy_name):
+    iam = g['session'].client('iam')
+
+    paginator = iam.get_paginator('list_policies')
+    for response in paginator.paginate(Scope="Local"):
+        for policy in response["Policies"]:
+            if policy_name == policy['PolicyName']:
+                return policy
+    return ''
+
+# check if policy has more than 0 attachments
+def policyIsAttached(g, policy_name):
+    if policyExists(g, policy_name):
+        if getPolicy(g, policy_name)['AttachmentCount']:
+            return True
+    else:
+        return False
+
 # create iam role
 def create_iam_role(g, role_name, json_file_path):
     iam = g['session'].client('iam')
@@ -204,7 +223,8 @@ def deleteInstanceProfile(g):
         else:
             instance_profile.delete()
 
-    detach_iam_policy(g, policy_name, role_name)
+    if policyIsAttached(g, policy_name):
+        detach_iam_policy(g, policy_name, role_name)
     if roleExists(g, role_name):
         delete_iam_role(g, role_name)
     if policyExists(g, policy_name):
