@@ -58,24 +58,24 @@ def createEc2Instances(g):
                 # TODO: utilize more robust templating instead
                 MODIFIED_USERDATA_SCRIPT += "\n" + "makeSharedDirectory \"" + user['login'] + "\" \"" + volume['mount'] + "\" &"
     
+    # give sudo to users configured to have it
+    for user in config['server']['users']:
+        if user['can_sudo']:
+            MODIFIED_USERDATA_SCRIPT += "\n" + "giveUserSudo \"" + user['login'] + "\" &"
+
     iam_instance_profile = createInstanceProfile(g)
     
-    # if using a default vpc, just grab first subnet in deployed list
     subnet_id = None
-    if g['config']['vpc']['use_default_vpc']:
-        subnet_id = list(deployed['subnets'].keys())[0]
-    # if using custom vpc, filter subnet by tag Name
-    else:
-        subnet_filters = []
-        for _tag in g['config']['server']['subnet']['tags']:
-            tag_filter = {}
-            tag_filter['Name'] = 'tag:' +_tag['key']
-            tag_filter['Values'] = []
-            tag_filter['Values'].append(_tag['value'])
-            subnet_filters.append(tag_filter)
-        #filters = [{'Name': 'tag:Name', 'Values':['fetch-devops-challenge-subnet-1']}]
-        subnet = list(ec2_resource.subnets.filter(Filters=subnet_filters))[0]
-        subnet_id = subnet.id
+    subnet_filters = []
+    for _tag in g['config']['server']['subnet']['tags']:
+        tag_filter = {}
+        tag_filter['Name'] = 'tag:' +_tag['key']
+        tag_filter['Values'] = []
+        tag_filter['Values'].append(_tag['value'])
+        subnet_filters.append(tag_filter)
+    #filters = [{'Name': 'tag:Name', 'Values':['fetch-devops-challenge-subnet-1']}]
+    subnet = list(ec2_resource.subnets.filter(Filters=subnet_filters))[0]
+    subnet_id = subnet.id
 
     print('getting ami image id')
     image_id = getLatestAMI(g)

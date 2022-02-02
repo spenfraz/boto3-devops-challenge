@@ -12,9 +12,29 @@ curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip
 unzip awscliv2.zip
 ./aws/install
 
+### giveUserSudo(username)
+##  NOTE: 
+##    This function adds a user to the wheel group,
+##   gives the user a documented temporary sudo password and then 
+##   expires the password (requiring change on next login).
+##
+# $1 ==> username
+giveUserSudo () {
+    
+    # add user to wheel group (centos based)
+    usermod -aG wheel $1
+
+    # give temporary password to user
+    echo $1:"36skip74up36dog" | chpasswd
+
+    # expire password for user (require change on next login)
+    passwd --expire $1
+}
 
 ### createAdminUser(username)
-##  NOTE: 
+##  NOTE: the temporary sudo password is hardcoded for now. It is
+##    documented in config.yaml though.
+##
 ##      This function copies over the public key from the ec2-user
 ##    .ssh/authorized_keys to the the new (admin) user's authorized_keys.
 ##  --> Deletes the ec2-user. 

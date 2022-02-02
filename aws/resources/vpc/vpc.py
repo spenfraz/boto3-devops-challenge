@@ -2,45 +2,6 @@ import time
 from aws.utils.utils import updateDeployed
 
 
-# Check for an existing default vpc, if none, create new default vpc, else update vpcID and sgID.
-# After creating default vpc save its vpcID and sgID to ('deployed' json) output file.
-def createDefaultVPC(g):
-    ec2_resource = g['session'].resource('ec2')
-    ec2_client = g['session'].client('ec2')
-    
-    changes = {}
-
-    filters = [{'Name':'is-default', 'Values':['true']}]
-    vpcs = list(ec2_resource.vpcs.filter(Filters=filters))
-
-    default_vpc = None
-    if len(vpcs):
-        # Every AWS account has one default VPC per AWS Region.
-        default_vpc = vpcs[0]
-    
-    if default_vpc:
-        changes['vpc_id'] = default_vpc.id
-        changes['sg_id'] = [sg.id for sg in default_vpc.security_groups.all()][0]
-        changes['subnets'] = {}
-        for sn in default_vpc.subnets.all():
-            changes['subnets'][sn.id] = {}
-            changes['subnets'][sn.id]['az'] = sn.availability_zone
-            changes['subnets'][sn.id]['cidr'] = sn.cidr_block
-    else:
-        vpc_id = ec2_client.create_default_vpc()['Vpc']['VpcId']
-        default_vpc = list(ec2_resource.vpcs.filter(VpcIds=[vpc_id]))[0]
-
-        changes['vpc_id'] = vpc_id
-        changes['sg_id'] = [sg.id for sg in default_vpc.security_groups.all()][0]
-        changes['subnets'] = {}
-        for sn in default_vpc.subnets.all():
-            changes['subnets'][sn.id] = {}
-            changes['subnets'][sn.id]['az'] = sn.availability_zone
-            changes['subnets'][sn.id]['cidr'] = sn.cidr_block
-
-    updateDeployed(g, changes)
-
-
 # check if vpc exists, filtering on cidr and tag:Name
 def getVpcByTagsAndCidr(g):
     ec2_resource = g['session'].resource('ec2')

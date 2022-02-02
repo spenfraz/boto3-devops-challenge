@@ -3,7 +3,7 @@ import os, time, argparse
 from aws.utils.utils import readFromConfig, loadAwsCredentials, teardown
 from aws.resources.iam.iam import deleteInstanceProfile
 from aws.utils.ssh import createSshKeys, deleteSshKeys, force_admin_pass_change, sendKeys
-from aws.resources.vpc.vpc import createDefaultVPC, createVPC
+from aws.resources.vpc.vpc import createVPC
 from aws.resources.ec2.ec2 import createEc2Instances
 
 def run(root_path):
@@ -28,12 +28,7 @@ def run(root_path):
         deleteSshKeys(g)
     else:
         createSshKeys(g)
-        # use default vpc
-        if g['config']['vpc']['use_default_vpc']:
-            createDefaultVPC(g)
-        else:
-            # use custom vpc
-            createVPC(g)
+        createVPC(g)
         createEc2Instances(g)
         sendKeys(g)
         # expire admin (sudo) password/force change on next login

@@ -5,10 +5,7 @@
     file: aws.env
   ssh_keys:
     directory: ssh_keys
-  vpc:
-    # if true, the default vpc (in region specified from credentials) will be used (or created if none) (all vpc and subnet fields will be ignored).
-    # if false, a custom vpc will be created using vpc and subnet fields.
-    use_default_vpc: false
+  vpc: # custom vpc
     cidr: 192.168.0.0/16
     tags:
       # Ensure the Name tag is listed first (where key=Name)
@@ -37,10 +34,10 @@
     instance_type: t2.micro
     min_count: 1
     max_count: 1
-    # NOTE: userdata (import) is hardcoded at the moment and not gotten from here
+    # NOTE: userdata (import) is hardcoded as python string at the moment and not gotten from here
     userdata:
-      directory: aws_resources_ec2_userdata # NOTE: not currently used
-      file: userdata.sh # NOTE: not currently used
+      directory: aws_resources_ec2_userdata # *******NOTE: not currently used ********
+      file: userdata.sh # *********NOTE: not currently used **********
     iam:
       roles_directory: aws_resources_iam_role
       policy_directory: aws_resources_iam_policy
@@ -77,10 +74,10 @@
     # non-admin users (without sudo access)
     users:
       - login: user1
-        can_sudo: false # NOTE: not currently used
+        can_sudo: false
         ssh_key:
           name: user1-key.pem
       - login: user2
-        can_sudo: false # NOTE: not currently used
+        can_sudo: false
         ssh_key:
           name: user2-key.pem
