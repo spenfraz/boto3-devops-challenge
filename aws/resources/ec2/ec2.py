@@ -17,23 +17,6 @@ def createEc2Instances(g):
     ec2_resource = g['session'].resource('ec2')
     ec2_client = g['session'].client('ec2')
 
-    # Add inbound security group rule for ssh
-    sg = ec2_resource.SecurityGroup(deployed['sg_id'])
-    if sg.ip_permissions:
-        sg.revoke_ingress(IpPermissions=sg.ip_permissions)
-    response = sg.authorize_ingress(
-        IpPermissions=[
-            {
-                "FromPort": 22,
-                "ToPort": 22,
-                "IpProtocol": "tcp",
-                "IpRanges": [
-                    {"CidrIp": "0.0.0.0/0", "Description": "internet"},
-                ],
-            }
-        ]
-    )
-
     volumes = config['server']['volumes']
     MODIFIED_USERDATA_SCRIPT = USERDATA_SCRIPT
     
@@ -48,21 +31,32 @@ def createEc2Instances(g):
         #device_type['VolumeType'] = volume['type']
         block_device['Ebs'] = device_type
         blockDeviceMappings.append(block_device)
-
+        
+        # mount non / volumes
         if not volume['mount'] == '/':
+            # edit userdata script to make call to bash function
+            # TODO: utilize more robust templating instead
             MODIFIED_USERDATA_SCRIPT += "\n" +  "formatAndMount \"" + volume['device'] + "\" \"" + volume['type'] + "\" \"" + volume['mount'] + "\""
         
-    
+    # create admin user
     admin_user = config['server']['admin']['login']
+    # edit userdata script to make call to bash function
+    # TODO: utilize more robust templating instead
     MODIFIED_USERDATA_SCRIPT += "\n" + "createAdminUser \"" + admin_user + "\""
 
+    # create non-admin users
     for user in config['server']['users']:
+        # edit userdata script to make call to bash function
+        # TODO: utilize more robust templating instead
         MODIFIED_USERDATA_SCRIPT += "\n" + "createRegularUser \"" + user['login'] + "\""
     
+    # make user specific shared (read) directories on mounted volumes 
     for user in config['server']['users']:
         for volume in volumes:
             if volume['mount'] != '/':
-                MODIFIED_USERDATA_SCRIPT += "\n" + "makeSharedDirectory \"" + user['login'] + "\" \"" + volume['mount'] + "\""
+                # edit userdata script to make call to bash function
+                # TODO: utilize more robust templating instead
+                MODIFIED_USERDATA_SCRIPT += "\n" + "makeSharedDirectory \"" + user['login'] + "\" \"" + volume['mount'] + "\" &"
     
     iam_instance_profile = createInstanceProfile(g)
     
@@ -83,8 +77,10 @@ def createEc2Instances(g):
         subnet = list(ec2_resource.subnets.filter(Filters=subnet_filters))[0]
         subnet_id = subnet.id
 
+    print('getting ami image id')
     image_id = getLatestAMI(g)
     if image_id:
+        print('creating ec2 instance(s)')
         while(True):
             try:
                 reservation = ec2_client.run_instances(
@@ -132,15 +128,8 @@ def createEc2Instances(g):
         path = config['ssh_keys']['directory'] + os.sep
         keyfile = config['server']['admin']['ssh_key']['name']
         admin_user = config['server']['admin']['login']
-        # print ssh login commands for users
-        '''
-        for inst in instances:
-            print()
-            print('ssh -i ' + './' + path + keyfile + " " + admin_user + '@' + inst.public_dns_name)
-            for users in g['config']['server']['users']:
-                print('ssh -i ' + './' + path + users['login'] + '-key.pem' + " " + users['login'] + '@' + inst.public_dns_name)
-        '''
-        # iterate over ec2 instances and write state to output file
+                
+        # iterate over ec2 instances and write ec2 instance public dns and ssh info to output file
         deployed['ec2_instances'] = []
         for inst in instances:
             ec2data = {}
@@ -150,12 +139,8 @@ def createEc2Instances(g):
             for users in g['config']['server']['users']:
                 ec2data['ssh'].append('ssh -i ' + path + users['login'] + '-key.pem' + " " + users['login'] + '@' + inst.public_dns_name)
             deployed['ec2_instances'].append(ec2data)
-            #pprint(inst.block_device_mappings)
-            #volumes = ec2_client.describe_instance_attribute(
-            #    InstanceId=inst.id,
-            #    Attribute='blockDeviceMapping')
 
-            # iterate over subnets in output file and fill in extra state info
+            # iterate over subnets and update output file volume data per instance
             for sn_id in deployed['subnets']:
                 if sn_id == inst.subnet_id:
                     deployed['subnets'][sn_id][inst.id] = {}
@@ -167,6 +152,7 @@ def createEc2Instances(g):
                                 v.volume_id
                             ]
                         )
+                        
                         deployed['subnets'][sn_id][inst.id][v.volume_id] = []
                         vdata = {}
                         vdata['size'] = v.size

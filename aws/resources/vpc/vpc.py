@@ -15,7 +15,7 @@ def createDefaultVPC(g):
 
     default_vpc = None
     if len(vpcs):
-        # Every AWS account has one default VPC for each AWS Region.
+        # Every AWS account has one default VPC per AWS Region.
         default_vpc = vpcs[0]
     
     if default_vpc:
@@ -146,6 +146,24 @@ def createCustomVpc(g):
     # create sec group
     sec_group = ec2_resource.create_security_group(
         GroupName='inbound-ssh', Description='inbound ssh access', VpcId=vpc.id)
+
+    '''
+    # Add inbound security group rule for ssh
+    sg = ec2_resource.SecurityGroup(deployed['sg_id'])
+    if sg.ip_permissions:
+        sg.revoke_ingress(IpPermissions=sg.ip_permissions)
+    response = sg.authorize_ingress(
+        IpPermissions=[
+            {
+                "FromPort": 22,
+                "ToPort": 22,
+                "IpProtocol": "tcp",
+                "IpRanges": [
+                    {"CidrIp": "0.0.0.0/0", "Description": "internet"},
+                ],
+            }
+        ]
+    )'''
     
     # add inbound ssh sec group rule
     sec_group.authorize_ingress(
@@ -167,20 +185,15 @@ def createVPC(g):
     if vpc:
         print('vpc exists')
 
-        changes['vpc_id'] = {}
         changes['vpc_id'] = vpc.id
         changes['vpc_cidr'] = vpc.cidr_block
         updateDeployed(g, changes)
 
         changes['subnets'] = {}
-        subnet = {}
         for sn in vpc.subnets.all():
             changes['subnets'][sn.id] = {}
             changes['subnets'][sn.id]['az'] = sn.availability_zone
             changes['subnets'][sn.id]['cidr'] = sn.cidr_block
-        
-        changes['vpc_id']['subnets'] = []
-        changes['vpc_id']['subnets'].append(subnet)
 
         changes['sg_id'] = [sg.id for sg in vpc.security_groups.all()][0]
 
@@ -190,15 +203,13 @@ def createVPC(g):
         vpc, subnets, sec_group = createCustomVpc(g)
 
         # update changes
-        changes['vpc_id'] = {}
         changes['vpc_id'] = vpc.id
         updateDeployed(g, changes)
 
         changes['vpc_cidr'] = vpc.cidr_block
         
         changes['subnets'] = {}
-        subnet = {}
-        
+                
         for sn in subnets:
             changes['subnets'][sn.id] = {}
             changes['subnets'][sn.id]['az'] = sn.availability_zone

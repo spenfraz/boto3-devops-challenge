@@ -1,4 +1,3 @@
-USERDATA_SCRIPT = '''
 #!/bin/bash
 set -x #mode of the shell where all executed commands are printed to the terminal.
 set -e #mode of the shell that immediately exits if any command [1] has a non-zero exit status.
@@ -6,8 +5,8 @@ set -e #mode of the shell that immediately exits if any command [1] has a non-ze
 EC2_INSTANCE_ID=$(curl -s http://instance-data/latest/meta-data/instance-id)
 REGION=$(curl -s http://instance-data/latest/meta-data/placement/region)
 
-#install aws cli (2)
-yum install -y unzip
+# install aws cli (2)
+sudo yum install -y unzip
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
 unzip awscliv2.zip
 ./aws/install
@@ -40,7 +39,7 @@ createAdminUser () {
     # change (recursive) ownership from root:root to new user for .ssh/
     chown $1:$1 -R /home/$1/.ssh
 
-    # set new admin users password to initial_sudo_password from config
+    # set new admin users password to temp password
     echo $1:"36skip74up36dog" | chpasswd
 
     # delete ec2-user (and home directory)
@@ -112,18 +111,18 @@ makeSharedDirectory () {
 formatAndMount () {
 
     # Volume device_name ==> $1
-    #VOLUME_STATE="unknown"
-    #until [ "${VOLUME_STATE}" == "attached" ]; do
-    #    VOLUME_STATE=$(aws ec2 describe-volumes \
-    #    --region ${REGION} \
-    #    --filters \
-    #        Name=attachment.instance-id,Values=${EC2_INSTANCE_ID} \
-    #        Name=attachment.device,Values=$1 \
-    #    --query Volumes[].Attachments[].State \
-    #    --output text)
-    #
-    #    sleep 5
-    #done
+    VOLUME_STATE="unknown"
+    until [ "${VOLUME_STATE}" == "attached" ]; do
+        VOLUME_STATE=$(aws ec2 describe-volumes \
+        --region ${REGION} \
+        --filters \
+            Name=attachment.instance-id,Values=${EC2_INSTANCE_ID} \
+            Name=attachment.device,Values=$1 \
+        --query Volumes[].Attachments[].State \
+        --output text)
+
+        sleep 5
+    done
 
     # Format $1 if it does not contain a partition yet
     if [ "$(file -b -s $1)" == "data" ]; then
@@ -137,4 +136,3 @@ formatAndMount () {
     echo $1 $3 $2 defaults,nofail 0 2 >> /etc/fstab
 
 }
-'''

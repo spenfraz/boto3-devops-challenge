@@ -1,9 +1,6 @@
 import os, json, yaml, boto3
 from yaml.loader import SafeLoader
-
 from dotenv import load_dotenv
-from os.path import join, dirname
-
 
 # load aws credentials from .env file
 def loadAwsCredentials(g):

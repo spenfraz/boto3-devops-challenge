@@ -47,7 +47,7 @@ def getPolicyArn(g, policy_name):
         for policy in response["Policies"]:
             if policy_name == policy['PolicyName']:
                 return policy['Arn']
-    return ''
+    return None
 
 # get policy dictionary
 def getPolicy(g, policy_name):
@@ -58,7 +58,7 @@ def getPolicy(g, policy_name):
         for policy in response["Policies"]:
             if policy_name == policy['PolicyName']:
                 return policy
-    return ''
+    return None
 
 # check if policy has more than 0 attachments
 def policyIsAttached(g, policy_name):
@@ -73,17 +73,6 @@ def create_iam_role(g, role_name, json_file_path):
     iam = g['session'].client('iam')
 
     assume_role_policy_document = readFromFile(json_file_path)
-    '''json.dumps({
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": { 
-                    "Service": "ec2.amazonaws.com"},
-                "Action": "sts:AssumeRole"
-            }
-        ]
-    })'''
 
     response = iam.create_role(
         RoleName = role_name,
@@ -107,16 +96,7 @@ def create_iam_policy(g, role_name, json_file_path):
 
     # Create a policy
     policy = readFromFile(json_file_path)
-    '''json.dumps({
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": "ec2:DescribeVolumes",
-                "Resource": "*"
-            }
-        ]
-    })'''
+    
     response = iam.create_policy(
         PolicyName=role_name,
         PolicyDocument=policy

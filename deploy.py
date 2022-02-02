@@ -1,14 +1,10 @@
 import os, time, argparse
 #from pprint import pprint
-
 from aws.utils.utils import readFromConfig, loadAwsCredentials, teardown
-
 from aws.resources.iam.iam import deleteInstanceProfile
-
 from aws.utils.ssh import createSshKeys, deleteSshKeys, force_admin_pass_change, sendKeys
 from aws.resources.vpc.vpc import createDefaultVPC, createVPC
 from aws.resources.ec2.ec2 import createEc2Instances
-
 
 def run(root_path):
     config, deployed = readFromConfig(root_path, args.filename)
@@ -22,13 +18,14 @@ def run(root_path):
     #logger = getLogger()
     
     g['session'] = session
+    g['ec2_resource'] = session.resource('ec2')
+    g['ec2_client'] = session.client('ec2')
     #g['logger'] = logger
 
     if args.destroy:
         teardown(g)
         deleteInstanceProfile(g)
         deleteSshKeys(g)
-
     else:
         createSshKeys(g)
         # use default vpc
@@ -38,10 +35,12 @@ def run(root_path):
             # use custom vpc
             createVPC(g)
         createEc2Instances(g)
-        time.sleep(20)
         sendKeys(g)
-        time.sleep(10)
-        force_admin_pass_change(g)
+        # expire admin (sudo) password/force change on next login
+        for host in g['deployed']['ec2_instances']:
+            hostname = host['public_dns']
+            force_admin_pass_change(g, hostname)
+        
         i = 0
         for cmd in g['deployed']['ec2_instances'][i]['ssh']:
             print(cmd)

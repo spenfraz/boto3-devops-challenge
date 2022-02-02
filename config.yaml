@@ -6,7 +6,7 @@
   ssh_keys:
     directory: ssh_keys
   vpc:
-    # if true, a default vpc will be created (all vpc and subnet fields will be ignored).
+    # if true, the default vpc (in region specified from credentials) will be used (or created if none) (all vpc and subnet fields will be ignored).
     # if false, a custom vpc will be created using vpc and subnet fields.
     use_default_vpc: false
     cidr: 192.168.0.0/16
@@ -16,7 +16,7 @@
         value: fetch-devops-challenge-vpc
     subnets:
       - cidr: 192.168.1.0/24
-        availability_zone: us-east-1a
+        availability_zone: us-east-1a # !!!!! NOTE: may need to be changed per your region specified in aws.env !!!!!
         tags:
           # Ensure the Name tag is listed first (where key=Name)
           - key: Name
@@ -37,9 +37,10 @@
     instance_type: t2.micro
     min_count: 1
     max_count: 1
+    # NOTE: userdata (import) is hardcoded at the moment and not gotten from here
     userdata:
-      directory: aws_resources_ec2_userdata
-      file: userdata.sh
+      directory: aws_resources_ec2_userdata # NOTE: not currently used
+      file: userdata.sh # NOTE: not currently used
     iam:
       roles_directory: aws_resources_iam_role
       policy_directory: aws_resources_iam_policy
@@ -76,10 +77,10 @@
     # non-admin users (without sudo access)
     users:
       - login: user1
-        can_sudo: false
+        can_sudo: false # NOTE: not currently used
         ssh_key:
           name: user1-key.pem
       - login: user2
-        can_sudo: false
+        can_sudo: false # NOTE: not currently used
         ssh_key:
           name: user2-key.pem
