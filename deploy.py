@@ -1,31 +1,28 @@
-import os, time, argparse
-#from pprint import pprint
-from aws.utils.utils import readFromConfig, loadAwsCredentials, teardown
+import os, argparse
+from pprint import pprint
+from aws.utils.utils import readFromConfig, loadAwsCredentials, clearDeployed
 from aws.resources.iam.iam import deleteInstanceProfile
+from aws.resources.vpc.vpc import createVPC, teardown
 from aws.utils.ssh import createSshKeys, deleteSshKeys, force_admin_pass_change, sendKeys
-from aws.resources.vpc.vpc import createVPC
 from aws.resources.ec2.ec2 import createEc2Instances
 
 def run(root_path):
-    config, deployed = readFromConfig(root_path, args.filename)
+    config = readFromConfig(root_path, args.filename)
+    session, region = loadAwsCredentials(root_path, config)
 
     g = {}
-    g['config'] = config
-    g['deployed'] = deployed
     g['root_path'] = root_path
-
-    session = loadAwsCredentials(g)
-    #logger = getLogger()
-    
+    g['config'] = config
+    g['config']['region'] = region
+    g['deployed'] = {}
     g['session'] = session
-    g['ec2_resource'] = session.resource('ec2')
-    g['ec2_client'] = session.client('ec2')
-    #g['logger'] = logger
 
+    print()
     if args.destroy:
         teardown(g)
         deleteInstanceProfile(g)
         deleteSshKeys(g)
+        clearDeployed(g)
     else:
         createSshKeys(g)
         createVPC(g)

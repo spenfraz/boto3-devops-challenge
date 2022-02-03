@@ -163,7 +163,7 @@ def force_admin_pass_change(g, hostname):
     connected_client = getParamikoSSHClient(g, hostname)
 
     temp_password = g['config']['server']['admin']['initial_sudo_password']
-    print('  forcing password reset for ' + admin_username + ' on next ssh login')
+    print('  forcing (sudo) password reset for ' + admin_username + ' on next ssh login')
     print()
 
     # run a yum update in background and continue upon logout

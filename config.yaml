@@ -34,10 +34,10 @@
     instance_type: t2.micro
     min_count: 1
     max_count: 1
-    # NOTE: userdata (import) is hardcoded as python string at the moment and not gotten from here
+    # ******* NOTE: userdata is hardcoded as python string and not gotten from here **********
     userdata:
-      directory: aws_resources_ec2_userdata # *******NOTE: not currently used ********
-      file: userdata.sh # *********NOTE: not currently used **********
+      directory: aws_resources_ec2_userdata # *******NOTE: userdata is hardcoded, this field is currently not used ********
+      file: userdata.sh # *********NOTE: userdata is hardcoded, this field is currently not used **********
     iam:
       roles_directory: aws_resources_iam_role
       policy_directory: aws_resources_iam_policy

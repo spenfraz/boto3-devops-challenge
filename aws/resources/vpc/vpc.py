@@ -1,6 +1,17 @@
 import time
-from aws.utils.utils import updateDeployed
 
+from botocore.exceptions import ClientError
+
+
+# check if vpc exists by vpc_id
+def vpc_exists(g, vpc_id):
+    ec2_client = g['session'].client('ec2')
+    try:
+        ec2_client.describe_vpcs(VpcIds=[vpc_id])
+    except ClientError as e:
+        print('\n' + e + '\n')
+        return False
+    return True
 
 # check if vpc exists, filtering on cidr and tag:Name
 def getVpcByTagsAndCidr(g):
@@ -38,12 +49,200 @@ def getVpcByTagsAndCidr(g):
     else:
         return None
 
+# get subnets by tags from config.yaml
+def getSubnetsByTag(g):
+    ec2_resource = g['session'].resource('ec2')
 
+    subnet_filters = []
+    for _tag in g['config']['server']['subnet']['tags']:
+        tag_filter = {}
+        tag_filter['Name'] = 'tag:' +_tag['key']
+        tag_filter['Values'] = []
+        tag_filter['Values'].append(_tag['value'])
+        subnet_filters.append(tag_filter)
+    #filters = [{'Name': 'tag:Name', 'Values':['fetch-devops-challenge-subnet-1']}]
+    subnets = list(ec2_resource.subnets.filter(Filters=subnet_filters))
+    return subnets
+
+# destroy vpc and all ec2 instances in it
+def teardown(g):
+    ec2_client = g['session'].client('ec2')
+
+    vpc = getVpcByTagsAndCidr(g)
+    if not vpc:
+        print('vpc doesn\'t exist')
+    else:
+        print(vpc)
+        vpc_id = vpc.id
+
+        try:
+            # disassociate and release EIPs from EC2 instances
+            for subnet in vpc.subnets.all():
+                print(subnet)
+                for instance in subnet.instances.all():
+                    print(instance)
+                    filters = [{"Name": "instance-id", "Values": [instance.id]}]
+                    eips = ec2_client.describe_addresses(Filters=filters)["Addresses"]
+                    for eip in eips:
+                        ec2_client.disassociate_address(AssociationId=eip["AssociationId"])
+                        ec2_client.release_address(AllocationId=eip["AllocationId"])
+            
+            ## terminate EC2 instances
+
+            # get instances that are running in vpc
+            filters = [
+                {"Name": "instance-state-name", "Values": ["running"]},
+                {"Name": "vpc-id", "Values": [vpc_id]},
+            ]
+
+            # add instances to list
+            ec2_instances = ec2_client.describe_instances(Filters=filters)
+            instance_ids = []
+            for reservation in ec2_instances["Reservations"]:
+                instance_ids += [instance["InstanceId"] for instance in reservation["Instances"]]
+            
+            # begin terminating instances and wait for completion
+            print('terminating ec2 instances')
+            if instance_ids:
+                waiter = ec2_client.get_waiter("instance_terminated")
+                ec2_client.terminate_instances(InstanceIds=instance_ids)
+                waiter.wait(InstanceIds=instance_ids)
+            
+            ## move on to other VPC specific resources
+
+            # delete transit gateway attachment for this vpc
+            # note - this only handles vpc attachments, not vpn
+            for attachment in ec2_client.describe_transit_gateway_attachments()[
+                "TransitGatewayAttachments"
+            ]:
+                if attachment["ResourceId"] == vpc_id:
+                    ec2_client.delete_transit_gateway_vpc_attachment(
+                        TransitGatewayAttachmentId=attachment["TransitGatewayAttachmentId"]
+                    )
+
+            # delete NAT Gateways
+            # attached ENIs are automatically deleted
+            # EIPs are disassociated but not released
+            filters = [{"Name": "vpc-id", "Values": [vpc_id]}]
+            for nat_gateway in ec2_client.describe_nat_gateways(Filters=filters)["NatGateways"]:
+                ec2_client.delete_nat_gateway(NatGatewayId=nat_gateway["NatGatewayId"])
+
+            ec2_resource = g['session'].resource('ec2')
+
+            # detach default dhcp_options if associated with the vpc
+            dhcp_options_default = ec2_resource.DhcpOptions("default")
+            if dhcp_options_default:
+                dhcp_options_default.associate_with_vpc(VpcId=vpc.id)
+
+            # delete any vpc peering connections
+            for vpc_peer in ec2_client.describe_vpc_peering_connections()[
+                "VpcPeeringConnections"
+            ]:
+                if vpc_peer["AccepterVpcInfo"]["VpcId"] == vpc_id:
+                    ec2_resource.VpcPeeringConnection(vpc_peer["VpcPeeringConnectionId"]).delete()
+                if vpc_peer["RequesterVpcInfo"]["VpcId"] == vpc_id:
+                    ec2_resource.VpcPeeringConnection(vpc_peer["VpcPeeringConnectionId"]).delete()
+
+            # delete our endpoints
+            for ep in ec2_client.describe_vpc_endpoints(
+                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+            )["VpcEndpoints"]:
+                ec2_client.delete_vpc_endpoints(VpcEndpointIds=[ep["VpcEndpointId"]])
+
+            # delete custom security groups
+            for sg in vpc.security_groups.all():
+                if sg.group_name != "default":
+                    sg.delete()
+
+            # delete custom NACLs
+            for netacl in vpc.network_acls.all():
+                if not netacl.is_default:
+                    netacl.delete()
+
+            # ensure ENIs are deleted before proceding
+            timeout = time.time() + 300
+            filter = [{"Name": "vpc-id", "Values": [vpc_id]}]
+            #logger.debug(f"proceed with deleting ENIs")
+            reached_timeout = True
+            while time.time() < timeout:
+                if not ec2_client.describe_network_interfaces(Filters=filters)[
+                    "NetworkInterfaces"
+                ]:
+                    #logger.info(f"no ENIs remaining")
+                    reached_timeout = False
+                    break
+                else:
+                    #logger.info(f"waiting on ENIs to delete")
+                    time.sleep(30)
+
+            if reached_timeout:
+                print('ENI deletion timed out')
+                #logger.debug(f"ENI deletion timed out")
+
+            # delete subnets
+            for subnet in vpc.subnets.all():
+                for interface in subnet.network_interfaces.all():
+                    interface.delete()
+                subnet.delete()
+
+            # Delete routes, associations, and routing tables
+            filter = [{"Name": "vpc-id", "Values": [vpc_id]}]
+            route_tables = ec2_client.describe_route_tables(Filters=filter)["RouteTables"]
+            for route_table in route_tables:
+                for route in route_table["Routes"]:
+                    if route["Origin"] == "CreateRoute":
+                        ec2_client.delete_route(
+                            RouteTableId=route_table["RouteTableId"],
+                            DestinationCidrBlock=route["DestinationCidrBlock"],
+                        )
+                    for association in route_table["Associations"]:
+                        if not association["Main"]:
+                            ec2_client.disassociate_route_table(
+                                AssociationId=association["RouteTableAssociationId"] #### ERROR encountered #### botocore.exceptions.ClientError: An error occurred (InvalidAssociationID.NotFound) when calling the DisassociateRouteTable operation: The association ID 'rtbassoc-02082ff9ee5b78c6c' does not exist
+                            )
+                            
+                            ec2_client.delete_route_table(
+                                RouteTableId=route_table["RouteTableId"]  ##### ERROR encountered #####
+                            )
+
+            # delete routing tables without associations
+            for route_table in route_tables:
+                if route_table["Associations"] == []:
+                    ec2_client.delete_route_table(RouteTableId=route_table["RouteTableId"])
+
+            # destroy NAT gateways
+            filters = [{"Name": "vpc-id", "Values": [vpc_id]}]
+            nat_gateway_ids = [
+                nat_gateway["NatGatewayId"]
+                for nat_gateway in ec2_client.describe_nat_gateways(Filters=filters)[
+                    "NatGateways"
+                ]
+            ]
+            for nat_gateway_id in nat_gateway_ids:
+                ec2_client.delete_nat_gateway(NatGatewayId=nat_gateway_id)
+
+            # detach and delete all IGWs associated with the vpc
+            for gw in vpc.internet_gateways.all():
+                vpc.detach_internet_gateway(InternetGatewayId=gw.id)
+                gw.delete()
+
+            ec2_client.delete_vpc(VpcId=vpc_id)
+        except Exception as e:
+            print()
+            print(e)
+            print()
+            print('error occountered, retrying...')
+            time.sleep(6)
+            teardown(g)
+        print('vpc deleted')
+
+# create custom vpc, handling when vpc already exists
 def createCustomVpc(g):
     ec2_resource = g['session'].resource('ec2')
     ec2_client = g['session'].client('ec2')
 
     vpc = ec2_resource.create_vpc(CidrBlock=g['config']['vpc']['cidr'])
+    time.sleep(5)
     vpc.wait_until_available()
 
     # enable for public dns for ec2
@@ -85,7 +284,7 @@ def createCustomVpc(g):
         subnet = ec2_resource.create_subnet(CidrBlock=sn['cidr'], VpcId=vpc.id, AvailabilityZone=sn['availability_zone'])
         time.sleep(2)
         subnets.append(subnet)
-    
+
     for sn in subnets:
         # associate the route table with the subnet
         route_table.associate_with_subnet(SubnetId=sn.id)
@@ -105,7 +304,7 @@ def createCustomVpc(g):
         subnet.create_tags(Tags=subnet_tags)
     
     # create sec group
-    sec_group = ec2_resource.create_security_group(
+    security_group = ec2_resource.create_security_group(
         GroupName='inbound-ssh', Description='inbound ssh access', VpcId=vpc.id)
 
     '''
@@ -127,55 +326,48 @@ def createCustomVpc(g):
     )'''
     
     # add inbound ssh sec group rule
-    sec_group.authorize_ingress(
+    security_group.authorize_ingress(
         CidrIp='0.0.0.0/0',
         IpProtocol='tcp',
         FromPort=22,
         ToPort=22)
     
 
-    return vpc, subnets, sec_group
+    return vpc, subnets, security_group
 
 
 # create a custom vpc
 def createVPC(g):
+    from aws.utils.utils import updateDeployed
     changes = {}
 
     vpc = getVpcByTagsAndCidr(g)
     # if vpc exists, update output file
     if vpc:
         print('vpc exists')
+        
+        subnets = getSubnetsByTag(g)
 
-        changes['vpc_id'] = vpc.id
-        changes['vpc_cidr'] = vpc.cidr_block
-        updateDeployed(g, changes)
-
-        changes['subnets'] = {}
-        for sn in vpc.subnets.all():
-            changes['subnets'][sn.id] = {}
-            changes['subnets'][sn.id]['az'] = sn.availability_zone
-            changes['subnets'][sn.id]['cidr'] = sn.cidr_block
-
-        changes['sg_id'] = [sg.id for sg in vpc.security_groups.all()][0]
+        security_groups = []
+        for sg in vpc.security_groups.all():
+            if sg.group_name != "default":
+                security_groups.append(sg)
+        sec_group = security_groups[0]
 
     else:
         print('creating vpc')
         # create vpc
         vpc, subnets, sec_group = createCustomVpc(g)
 
-        # update changes
-        changes['vpc_id'] = vpc.id
-        updateDeployed(g, changes)
-
-        changes['vpc_cidr'] = vpc.cidr_block
-        
-        changes['subnets'] = {}
-                
-        for sn in subnets:
-            changes['subnets'][sn.id] = {}
-            changes['subnets'][sn.id]['az'] = sn.availability_zone
-            changes['subnets'][sn.id]['cidr'] = sn.cidr_block
-
-        changes['sg_id'] = sec_group.id
-
+    # update changes
+    changes['vpc_id'] = vpc.id
+    changes['vpc_cidr'] = vpc.cidr_block
+    changes['subnets'] = {}
+            
+    for sn in subnets:
+        changes['subnets'][sn.id] = {}
+        changes['subnets'][sn.id]['az'] = sn.availability_zone
+        changes['subnets'][sn.id]['cidr'] = sn.cidr_block
+    
+    changes['sg_id'] = sec_group.id
     updateDeployed(g, changes)

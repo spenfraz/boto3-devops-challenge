@@ -4,18 +4,91 @@ from pprint import pprint
 from operator import attrgetter
 
 from aws.resources.iam.iam import createInstanceProfile
+from aws.resources.vpc.vpc import getSubnetsByTag
 from aws.resources.ec2.userdata.userdata import USERDATA_SCRIPT
 
 from aws.utils.utils import updateDeployed
 
+def getRunningInstances(g):
+    ec2_client = g['session'].client('ec2')
+    ec2_resource = g['session'].resource('ec2')
+
+    # check for existing ec2 instances
+    # get instances that are running in vpc
+    filters = [
+        {"Name": "instance-state-name", "Values": ["running"]},
+        {"Name": "vpc-id", "Values": [g['deployed']['vpc_id']]},
+    ]
+
+    # add instances to list
+    ec2_instances = ec2_client.describe_instances(Filters=filters)
+    instance_ids = []
+    for reservation in ec2_instances["Reservations"]:
+        instance_ids += [instance["InstanceId"] for instance in reservation["Instances"]]
+    
+    return ec2_resource.instances.filter(
+        InstanceIds=instance_ids,
+    ), len(instance_ids)
+
+def updateEC2Deployed(g, instances):
+    config = g['config']
+    deployed = g['deployed']
+    ec2_client = g['session'].client('ec2')
+    changes = {}
+
+    path = config['ssh_keys']['directory'] + os.sep
+    keyfile = config['server']['admin']['ssh_key']['name']
+    admin_user = config['server']['admin']['login']
+            
+    # iterate over ec2 instances and write ec2 instance public dns, ssh, subnet and volume info to output file
+    changes['ec2_instances'] = []
+    for inst in instances:
+        ec2data = {}
+        ec2data['public_dns'] = inst.public_dns_name
+        ec2data['ssh'] = []
+        ec2data['ssh'].append('ssh -i ' + path + keyfile + " " + admin_user + '@' + inst.public_dns_name)
+        for users in g['config']['server']['users']:
+            ec2data['ssh'].append('ssh -i ' + path + users['login'] + '-key.pem' + " " + users['login'] + '@' + inst.public_dns_name)
+        changes['ec2_instances'].append(ec2data)
+
+        changes['subnets'] = {}
+        # iterate over subnets and update output file volume data per instance
+        for sn_id in deployed['subnets']:
+            changes['subnets'][sn_id] = {}
+            if sn_id == inst.subnet_id:
+                changes['subnets'][sn_id][inst.id] = {}
+                changes['subnets'][sn_id][inst.id]['public_dns'] = inst.public_dns_name
+                
+                for v in inst.volumes.all():
+                    volume_details = ec2_client.describe_volumes(
+                        VolumeIds=[
+                            v.volume_id
+                        ]
+                    )
+                    changes['subnets'][sn_id][inst.id][v.volume_id] = []
+                    vdata = {}
+                    vdata['size'] = v.size
+                    vdata['type'] = v.volume_type
+                    vdata['device'] = volume_details['Volumes'][0]['Attachments'][0]['Device']
+                    vdata['state'] = volume_details['Volumes'][0]['Attachments'][0]['State']
+                    changes['subnets'][sn_id][inst.id][v.volume_id].append(vdata)
+        
+        updateDeployed(g, changes)
 
 # Create EC2 instances from config dict and write changes to output file
 def createEc2Instances(g):
-    changes = {}
     config = g['config']
     deployed = g['deployed']
-    ec2_resource = g['session'].resource('ec2')
     ec2_client = g['session'].client('ec2')
+
+    instances, instance_count = getRunningInstances(g)
+    max_count = g['config']['server']['max_count']
+    # check that server.max_count is not already exceeded
+    if max_count <= instance_count:
+        print('max_count: ' + str(max_count) + ' for ec2 instances has already been reached ' + '(' + str(instance_count) + ')')
+        updateEC2Deployed(g, instances)
+        print('exiting...')
+        sys.exit(1)
 
     volumes = config['server']['volumes']
     MODIFIED_USERDATA_SCRIPT = USERDATA_SCRIPT
@@ -65,20 +138,11 @@ def createEc2Instances(g):
 
     iam_instance_profile = createInstanceProfile(g)
     
-    subnet_id = None
-    subnet_filters = []
-    for _tag in g['config']['server']['subnet']['tags']:
-        tag_filter = {}
-        tag_filter['Name'] = 'tag:' +_tag['key']
-        tag_filter['Values'] = []
-        tag_filter['Values'].append(_tag['value'])
-        subnet_filters.append(tag_filter)
-    #filters = [{'Name': 'tag:Name', 'Values':['fetch-devops-challenge-subnet-1']}]
-    subnet = list(ec2_resource.subnets.filter(Filters=subnet_filters))[0]
-    subnet_id = subnet.id
+    subnet_id = getSubnetsByTag(g)[0].id
 
     print('getting ami image id')
     image_id = getLatestAMI(g)
+
     if image_id:
         print('creating ec2 instance(s)')
         while(True):
@@ -103,9 +167,10 @@ def createEc2Instances(g):
                 )
                 break
             except Exception as e:
-                #print(traceback.format_exception(None, # <- type(e) by docs, but ignored 
-                #                     e, e.__traceback__),
-                #        file=sys.stderr, flush=True)
+                print()
+                print(traceback.format_exception(None, # <- type(e) by docs, but ignored 
+                                     e, e.__traceback__),
+                        file=sys.stderr, flush=True)
                 print()
                 print('See: https://forums.aws.amazon.com/thread.jspa?messageID=593651')
                 print('\"The delay you are seeing for AWS::IAM::InstanceProfile is intended; this is to account for and ensure the IAM service has propagated the profile fully. We do apologize for any inconvenience this may cause.\"')
@@ -120,48 +185,10 @@ def createEc2Instances(g):
         # wait for ec2 instances to be ready/running
         waiter = ec2_client.get_waiter('instance_running')
         waiter.wait(InstanceIds=instance_ids)
-
-        instances = ec2_resource.instances.filter(
-            InstanceIds=instance_ids,
-        )
-
-        path = config['ssh_keys']['directory'] + os.sep
-        keyfile = config['server']['admin']['ssh_key']['name']
-        admin_user = config['server']['admin']['login']
-                
-        # iterate over ec2 instances and write ec2 instance public dns and ssh info to output file
-        deployed['ec2_instances'] = []
-        for inst in instances:
-            ec2data = {}
-            ec2data['public_dns'] = inst.public_dns_name
-            ec2data['ssh'] = []
-            ec2data['ssh'].append('ssh -i ' + path + keyfile + " " + admin_user + '@' + inst.public_dns_name)
-            for users in g['config']['server']['users']:
-                ec2data['ssh'].append('ssh -i ' + path + users['login'] + '-key.pem' + " " + users['login'] + '@' + inst.public_dns_name)
-            deployed['ec2_instances'].append(ec2data)
-
-            # iterate over subnets and update output file volume data per instance
-            for sn_id in deployed['subnets']:
-                if sn_id == inst.subnet_id:
-                    deployed['subnets'][sn_id][inst.id] = {}
-                    deployed['subnets'][sn_id][inst.id]['public_dns'] = inst.public_dns_name
-                    
-                    for v in inst.volumes.all():
-                        volume_details = ec2_client.describe_volumes(
-                            VolumeIds=[
-                                v.volume_id
-                            ]
-                        )
-                        
-                        deployed['subnets'][sn_id][inst.id][v.volume_id] = []
-                        vdata = {}
-                        vdata['size'] = v.size
-                        vdata['type'] = v.volume_type
-                        vdata['device'] = volume_details['Volumes'][0]['Attachments'][0]['Device']
-                        vdata['state'] = volume_details['Volumes'][0]['Attachments'][0]['State']
-                        deployed['subnets'][sn_id][inst.id][v.volume_id].append(vdata)
         
-        updateDeployed(g, changes)
+        instances, instance_count = getRunningInstances(g)
+        updateEC2Deployed(g, instances)
+
     else:
         print('ImageId not found. Check filter values.')
         exit()
