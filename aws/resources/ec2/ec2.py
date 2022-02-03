@@ -5,7 +5,7 @@ from operator import attrgetter
 
 from aws.resources.iam.iam import createInstanceProfile
 from aws.resources.vpc.vpc import getSubnetsByTag
-from aws.resources.ec2.userdata.userdata import USERDATA_SCRIPT
+from aws.resources.ec2.userdata.userdata import getUserdataFromTemplate
 
 from aws.utils.utils import updateDeployed
 
@@ -91,7 +91,9 @@ def createEc2Instances(g):
         sys.exit(1)
 
     volumes = config['server']['volumes']
-    MODIFIED_USERDATA_SCRIPT = USERDATA_SCRIPT
+
+    initial_sudo_password = config['server']['admin']['initial_sudo_password']
+    MODIFIED_USERDATA_SCRIPT = getUserdataFromTemplate(initial_sudo_password)
     
     # volume configuration for ec2 instance(s)
     blockDeviceMappings = []
