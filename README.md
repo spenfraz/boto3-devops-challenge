@@ -4,7 +4,7 @@
 
 #### NOTE: tested on Windows 10, python version: 3.9.1, using ```cmd```
 #### NOTE: tested on MacOS 10.15.7, python version: 3.7.9, using ```terminal```
-#### NOTE: steps are the same except for "activate virtual environment"
+#### NOTE: steps for MacOS and Windows are the same except for "activate virtual environment"
 
 -------
 
