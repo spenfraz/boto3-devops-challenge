@@ -249,9 +249,9 @@ def teardown(g):
         except Exception as e:
             print()
             print(e)
-            print()
             print('error occurred, retrying...')
             time.sleep(6)
+            print()
             teardown(g)
 
 # create custom vpc, handling when vpc already exists

@@ -1,4 +1,4 @@
-import os, argparse
+import os, argparse, traceback, sys
 from pprint import pprint
 from aws.utils.utils import readFromConfig, loadAwsCredentials, clearDeployed
 from aws.resources.iam.iam import deleteInstanceProfile
@@ -49,4 +49,10 @@ if __name__ == '__main__':
 
     if args.filename:
         path = os.getcwd() + os.sep
-        run(path)
+        try:
+            run(path)
+        except Exception as e:
+            print()
+            print(traceback.format_exception(None, e, e.__traceback__), file=sys.stderr, flush=True)
+            print()
+            print('check network connection')

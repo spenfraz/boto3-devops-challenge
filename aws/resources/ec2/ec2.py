@@ -185,7 +185,7 @@ def createEc2Instances(g):
         for inst in reservation['Instances']:
             instance_ids.append(inst['InstanceId'])
         
-        print('  waiting for ec2 instances to be ready/running')
+        print('waiting for ec2 instances to be ready/running')
         # wait for ec2 instances to be ready/running
         waiter = ec2_client.get_waiter('instance_running')
         waiter.wait(InstanceIds=instance_ids)
