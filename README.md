@@ -30,7 +30,7 @@
 
 3. Create and add values to ```aws.env``` file (in ```fetch-devops-challenge``` project directory).
    ###### NOTE: no spaces or quotes in values.
-   ###### NOTE: if ```AWS_REGION``` is changed, ```vpc.subnets[n].availability_zone``` in ```config.yaml``` will need to be updated.
+   ###### NOTE: if ```AWS_REGION``` is changed, ```vpc.subnets[0].availability_zone``` in ```config.yaml``` will need to be updated.
 
         AWS_ACCESS_KEY_ID=
         AWS_SECRET_ACCESS_KEY=
