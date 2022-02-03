@@ -110,13 +110,14 @@ def createEc2Instances(g):
             # edit userdata script to make call to bash function
             # TODO: utilize more robust templating instead
             MODIFIED_USERDATA_SCRIPT += "\n" +  "formatAndMount \"" + volume['device'] + "\" \"" + volume['type'] + "\" \"" + volume['mount'] + "\""
-        
+    
+    
     # create admin user
     admin_user = config['server']['admin']['login']
     # edit userdata script to make call to bash function
     # TODO: utilize more robust templating instead
     MODIFIED_USERDATA_SCRIPT += "\n" + "createAdminUser \"" + admin_user + "\""
-
+    
     # create non-admin users
     for user in config['server']['users']:
         # edit userdata script to make call to bash function
@@ -135,9 +136,11 @@ def createEc2Instances(g):
     for user in config['server']['users']:
         if user['can_sudo']:
             MODIFIED_USERDATA_SCRIPT += "\n" + "giveUserSudo \"" + user['login'] + "\" &"
-
+    
+    print('creating ec2 instance profile')
     iam_instance_profile = createInstanceProfile(g)
     
+    print('getting subnet id')
     subnet_id = getSubnetsByTag(g)[0].id
 
     print('getting ami image id')
@@ -182,10 +185,14 @@ def createEc2Instances(g):
         for inst in reservation['Instances']:
             instance_ids.append(inst['InstanceId'])
         
+        print('  waiting for ec2 instances to be ready/running')
         # wait for ec2 instances to be ready/running
         waiter = ec2_client.get_waiter('instance_running')
         waiter.wait(InstanceIds=instance_ids)
         
+        print('ec2 instances ready/running')
+        print('updating state data in output file')
+        print()
         instances, instance_count = getRunningInstances(g)
         updateEC2Deployed(g, instances)
 

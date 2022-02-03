@@ -86,6 +86,7 @@ def teardown(g):
                     for eip in eips:
                         ec2_client.disassociate_address(AssociationId=eip["AssociationId"])
                         ec2_client.release_address(AllocationId=eip["AllocationId"])
+                        print('    disassociating and releasing EIPs from ec2 instances')
             
             ## terminate EC2 instances
 
@@ -103,13 +104,15 @@ def teardown(g):
             
             # begin terminating instances and wait for completion
             print('terminating ec2 instances')
+            print('waiting for ec2 instances to be terminated')
             if instance_ids:
                 waiter = ec2_client.get_waiter("instance_terminated")
                 ec2_client.terminate_instances(InstanceIds=instance_ids)
                 waiter.wait(InstanceIds=instance_ids)
+            print('ec2 instances terminated')
             
             ## move on to other VPC specific resources
-
+            print('deleting other vpc specific subresources')
             # delete transit gateway attachment for this vpc
             # note - this only handles vpc attachments, not vpn
             for attachment in ec2_client.describe_transit_gateway_attachments()[
@@ -119,6 +122,7 @@ def teardown(g):
                     ec2_client.delete_transit_gateway_vpc_attachment(
                         TransitGatewayAttachmentId=attachment["TransitGatewayAttachmentId"]
                     )
+                    print('  deleting transit gateway attachement for this vpc')
 
             # delete NAT Gateways
             # attached ENIs are automatically deleted
@@ -126,6 +130,7 @@ def teardown(g):
             filters = [{"Name": "vpc-id", "Values": [vpc_id]}]
             for nat_gateway in ec2_client.describe_nat_gateways(Filters=filters)["NatGateways"]:
                 ec2_client.delete_nat_gateway(NatGatewayId=nat_gateway["NatGatewayId"])
+                print('  deleting nat gateway')
 
             ec2_resource = g['session'].resource('ec2')
 
@@ -133,6 +138,7 @@ def teardown(g):
             dhcp_options_default = ec2_resource.DhcpOptions("default")
             if dhcp_options_default:
                 dhcp_options_default.associate_with_vpc(VpcId=vpc.id)
+                print('  detaching default dhcp_options associated with vpc')
 
             # delete any vpc peering connections
             for vpc_peer in ec2_client.describe_vpc_peering_connections()[
@@ -140,49 +146,53 @@ def teardown(g):
             ]:
                 if vpc_peer["AccepterVpcInfo"]["VpcId"] == vpc_id:
                     ec2_resource.VpcPeeringConnection(vpc_peer["VpcPeeringConnectionId"]).delete()
+                    print('  deleting vpc peering connection')
                 if vpc_peer["RequesterVpcInfo"]["VpcId"] == vpc_id:
                     ec2_resource.VpcPeeringConnection(vpc_peer["VpcPeeringConnectionId"]).delete()
+                    print('  deleting vpc peering connection')
 
             # delete our endpoints
             for ep in ec2_client.describe_vpc_endpoints(
                 Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
             )["VpcEndpoints"]:
                 ec2_client.delete_vpc_endpoints(VpcEndpointIds=[ep["VpcEndpointId"]])
+                print('  deleting vpc endpoint')
 
             # delete custom security groups
             for sg in vpc.security_groups.all():
                 if sg.group_name != "default":
                     sg.delete()
+                    print('  deleting security group')
 
             # delete custom NACLs
             for netacl in vpc.network_acls.all():
                 if not netacl.is_default:
                     netacl.delete()
+                    print('  deleting nacl')
 
             # ensure ENIs are deleted before proceding
             timeout = time.time() + 300
             filter = [{"Name": "vpc-id", "Values": [vpc_id]}]
-            #logger.debug(f"proceed with deleting ENIs")
             reached_timeout = True
             while time.time() < timeout:
                 if not ec2_client.describe_network_interfaces(Filters=filters)[
                     "NetworkInterfaces"
                 ]:
-                    #logger.info(f"no ENIs remaining")
+                    print('  no enis remaining')
                     reached_timeout = False
                     break
                 else:
-                    #logger.info(f"waiting on ENIs to delete")
+                    print('    waiting for enis to delete') 
                     time.sleep(30)
 
             if reached_timeout:
-                print('ENI deletion timed out')
-                #logger.debug(f"ENI deletion timed out")
+                print('     ENI deletion timed out')
 
             # delete subnets
             for subnet in vpc.subnets.all():
                 for interface in subnet.network_interfaces.all():
                     interface.delete()
+                    print('  deleting network interface')
                 subnet.delete()
 
             # Delete routes, associations, and routing tables
@@ -195,20 +205,24 @@ def teardown(g):
                             RouteTableId=route_table["RouteTableId"],
                             DestinationCidrBlock=route["DestinationCidrBlock"],
                         )
+                        print('  deleting route in route table')
                     for association in route_table["Associations"]:
                         if not association["Main"]:
                             ec2_client.disassociate_route_table(
                                 AssociationId=association["RouteTableAssociationId"] #### ERROR encountered #### botocore.exceptions.ClientError: An error occurred (InvalidAssociationID.NotFound) when calling the DisassociateRouteTable operation: The association ID 'rtbassoc-02082ff9ee5b78c6c' does not exist
                             )
+                            print('  disassociating route table\'s association to subnet')
                             
                             ec2_client.delete_route_table(
                                 RouteTableId=route_table["RouteTableId"]  ##### ERROR encountered #####
                             )
+                            print('  deleting route table')
 
             # delete routing tables without associations
             for route_table in route_tables:
                 if route_table["Associations"] == []:
                     ec2_client.delete_route_table(RouteTableId=route_table["RouteTableId"])
+                    print('  deleting route table without associations')
 
             # destroy NAT gateways
             filters = [{"Name": "vpc-id", "Values": [vpc_id]}]
@@ -220,21 +234,25 @@ def teardown(g):
             ]
             for nat_gateway_id in nat_gateway_ids:
                 ec2_client.delete_nat_gateway(NatGatewayId=nat_gateway_id)
+                print('  deleting nat gateway')
 
             # detach and delete all IGWs associated with the vpc
             for gw in vpc.internet_gateways.all():
                 vpc.detach_internet_gateway(InternetGatewayId=gw.id)
+                print('  detaching internet gateway from vpc')
                 gw.delete()
+                print('  deleting internet gateway')
 
             ec2_client.delete_vpc(VpcId=vpc_id)
+            print('  deleting vpc')
+            print('vpc deleted')
         except Exception as e:
             print()
             print(e)
             print()
-            print('error occountered, retrying...')
+            print('error occurred, retrying...')
             time.sleep(6)
             teardown(g)
-        print('vpc deleted')
 
 # create custom vpc, handling when vpc already exists
 def createCustomVpc(g):

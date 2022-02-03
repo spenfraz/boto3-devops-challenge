@@ -69,7 +69,3 @@ def updateDeployed(g, changes):
     
     return deployed
 
-# scan vpc resources and update output file
-def scanVPCAndUpdateDeployed(g):
-    pass
-
