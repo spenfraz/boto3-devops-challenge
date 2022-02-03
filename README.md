@@ -9,7 +9,7 @@
 -------
 
 ###### NOTE: after ```(venv) $ python deploy.py config.yaml``` completes, output file ```deployed.json``` will be created in ```fetch-devops-challenge``` directory.
-###### NOTE: after ```(venv) $ python deploy.py config.yaml``` completes, ssh commands will be printed to terminal.
+###### NOTE: after ```(venv) $ python deploy.py config.yaml``` completes, ssh commands will be printed to terminal and will be in output file ```deployed.json```.
 ###### NOTE: deployed ec2 instance(s) will have two 'extra' mounted partitions at ```/extra``` and ```/data```. Both are configured to give readonly access (recursively) to all users on the instance and will contain user specific directories, excluding ```admin``` (such as ```/extra/user1``` or ```/data/user1```) that give write permission to its respective (similarly named) user.
 
 ### Steps:
