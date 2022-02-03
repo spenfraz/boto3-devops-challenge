@@ -8,13 +8,14 @@ from aws.resources.ec2.ec2 import createEc2Instances
 
 def run(root_path):
     config = readFromConfig(root_path, args.filename)
-    session, region = loadAwsCredentials(root_path, config)
+    session, region, iam_user = loadAwsCredentials(root_path, config)
 
     g = {}
     g['root_path'] = root_path
     g['config'] = config
     g['config']['region'] = region
     g['deployed'] = {}
+    g['deployed']['iam_user'] = iam_user
     g['session'] = session
 
     print()

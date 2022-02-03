@@ -12,12 +12,15 @@ def loadAwsCredentials(root_path, config):
     
     region = os.getenv('AWS_REGION')
 
-    return boto3.session.Session(
+    session = boto3.session.Session(
         aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
         aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
         aws_session_token=os.getenv('AWS_SESSION_TOKEN'),
         region_name=os.getenv('AWS_REGION')
-    ), region
+    )
+    iam_user = session.client('iam').get_user()
+
+    return session, region, iam_user['User']['UserName']
 
 # Open the json file and return contents as dictionary
 def readFromFile(full_path):
