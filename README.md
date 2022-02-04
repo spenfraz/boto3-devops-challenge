@@ -29,13 +29,13 @@
         - ```source venv/bin/activate``` 
     - ```pip install -r requirements.txt```
 
-3. Create and add values to ```aws.env``` file (in ```fetch-devops-challenge``` project directory).
-   ###### NOTE: no spaces or quotes in values.
+3. Create a new file called ```aws.env``` in ```fetch-devops-challenge``` project directory using the snippet below and fill in the missing values.
+   ###### NOTE: no spaces or quotes in values (and no spaces after the equal signs).
    ###### NOTE: if ```AWS_REGION``` is changed, ```vpc.subnets[0].availability_zone``` in ```config.yaml``` will need to be updated.
 
-        AWS_ACCESS_KEY_ID=
-        AWS_SECRET_ACCESS_KEY=
-        AWS_REGION=us-east-1
+       AWS_ACCESS_KEY_ID=
+       AWS_SECRET_ACCESS_KEY=
+       AWS_REGION=us-east-1
         
 4. Run ```deploy.py```
     - ```python deploy.py config.yaml```
