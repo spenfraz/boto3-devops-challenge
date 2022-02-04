@@ -16,7 +16,7 @@
 ### Steps:
 
 1. Clone this repo:
-    - git clone https://github.com/spenfraz/fetch-devops-challenge.git
+    - ```git clone https://github.com/spenfraz/fetch-devops-challenge.git```
 
 2. Create virtual environment, activate and install dependencies.
     - ```cd fetch-devops-challenge```
