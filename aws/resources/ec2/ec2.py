@@ -34,6 +34,7 @@ def updateEC2Deployed(g, instances):
     config = g['config']
     deployed = g['deployed']
     ec2_client = g['session'].client('ec2')
+    ec2_resource = g['session'].resource('ec2')
     changes = {}
 
     path = config['ssh_keys']['directory'] + os.sep
@@ -55,6 +56,7 @@ def updateEC2Deployed(g, instances):
         # iterate over subnets and update output file volume data per instance
         for sn_id in deployed['subnets']:
             changes['subnets'][sn_id] = {}
+    
             if sn_id == inst.subnet_id:
                 changes['subnets'][sn_id][inst.id] = {}
                 changes['subnets'][sn_id][inst.id]['public_dns'] = inst.public_dns_name
@@ -73,7 +75,15 @@ def updateEC2Deployed(g, instances):
                     vdata['state'] = volume_details['Volumes'][0]['Attachments'][0]['State']
                     changes['subnets'][sn_id][inst.id][v.volume_id].append(vdata)
         
-        updateDeployed(g, changes)
+    vpc_id = g['deployed']['vpc_id']
+    subnets = ec2_resource.subnets.filter(
+        Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+    )
+    for sn in subnets:
+        changes['subnets'][sn.id]['az'] = sn.availability_zone
+        changes['subnets'][sn.id]['cidr'] = sn.cidr_block
+
+    updateDeployed(g, changes)
 
 # Create EC2 instances from config dict and write changes to output file
 def createEc2Instances(g):
