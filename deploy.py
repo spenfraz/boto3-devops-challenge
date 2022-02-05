@@ -34,11 +34,11 @@ def run(root_path):
             hostname = host['public_dns']
             force_admin_pass_change(g, hostname)
         
-        i = 0
-        for cmd in g['deployed']['ec2_instances'][i]['ssh']:
-            print(cmd)
-            i += 1
-        print()
+        # print ssh info
+        for instance in g['deployed']['ec2_instances']:
+            for cmd in instance['ssh']:
+                print(cmd)
+            print()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Deploy EC2 instance from yaml file configuration.')

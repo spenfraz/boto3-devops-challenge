@@ -53,10 +53,11 @@ def updateEC2Deployed(g, instances):
         changes['ec2_instances'].append(ec2data)
 
         changes['subnets'] = {}
-        # iterate over subnets and update output file volume data per instance
-        for sn_id in deployed['subnets']:
-            changes['subnets'][sn_id] = {}
-    
+    # iterate over subnets and update output file volume data per instance
+    for sn_id in deployed['subnets']:
+        changes['subnets'][sn_id] = {}
+        
+        for inst in instances:
             if sn_id == inst.subnet_id:
                 changes['subnets'][sn_id][inst.id] = {}
                 changes['subnets'][sn_id][inst.id]['public_dns'] = inst.public_dns_name
