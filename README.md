@@ -1,5 +1,5 @@
-# fetch-devops-challenge
-#### Fetch Rewards Coding Assessment - DevOps Engineer
+# boto3-devops-challenge
+#### Boto3 DevOps Challenge
 -------
 
 #### NOTE: tested on Windows 10, python version: 3.9.1, using ```cmd```
